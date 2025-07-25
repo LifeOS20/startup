@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import BottomNavigation from "./BottomNavigation";
 import { 
   Calendar, 
   Heart, 
@@ -249,31 +250,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-border/50 shadow-widget">
-        <div className="flex items-center justify-around py-3 px-2">
-          <Button variant="ghost" className="flex-col gap-1 h-auto py-2 text-primary bg-primary/10">
-            <Home className="h-5 w-5" />
-            <span className="text-xs font-medium">Home</span>
-          </Button>
-          <Button variant="ghost" className="flex-col gap-1 h-auto py-2 hover:bg-primary/10 hover:text-primary">
-            <Calendar className="h-5 w-5" />
-            <span className="text-xs">Schedule</span>
-          </Button>
-          <Button variant="ghost" className="flex-col gap-1 h-auto py-2 hover:bg-primary/10 hover:text-primary">
-            <Heart className="h-5 w-5" />
-            <span className="text-xs">Health</span>
-          </Button>
-          <Button variant="ghost" className="flex-col gap-1 h-auto py-2 hover:bg-primary/10 hover:text-primary">
-            <DollarSign className="h-5 w-5" />
-            <span className="text-xs">Finance</span>
-          </Button>
-          <Button variant="ghost" className="flex-col gap-1 h-auto py-2 hover:bg-primary/10 hover:text-primary">
-            <Users className="h-5 w-5" />
-            <span className="text-xs">Family</span>
-          </Button>
-        </div>
-      </div>
+      <BottomNavigation />
       
       {/* Bottom padding for navigation */}
       <div className="h-20" />
