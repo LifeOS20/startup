@@ -23,6 +23,7 @@ export default {
 				'gradient-health': 'var(--gradient-health)',
 				'gradient-finance': 'var(--gradient-finance)',
 				'gradient-calendar': 'var(--gradient-calendar)',
+				'gradient-mood': 'var(--gradient-mood)',
 				'gradient-subtle': 'var(--gradient-subtle)'
 			},
 			boxShadow: {

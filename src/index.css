@@ -8,59 +8,60 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Base colors - wellness focused palette */
-    --background: 248 250 252;
-    --foreground: 215 25% 27%;
+    /* Base colors - warm and approachable */
+    --background: 10 20% 98%;
+    --foreground: 215 25% 16%;
 
-    --card: 255 255 255;
-    --card-foreground: 215 25% 27%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 16%;
 
-    --popover: 255 255 255;
-    --popover-foreground: 215 25% 27%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 16%;
 
-    /* Primary - calming blue for trust */
-    --primary: 213 94% 68%;
-    --primary-foreground: 255 255 255;
-    --primary-glow: 213 94% 78%;
+    /* Primary - warm emerald green (trustworthy & fresh) */
+    --primary: 158 64% 52%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 158 64% 62%;
 
-    /* Secondary - soft purple for wellness */
-    --secondary: 262 83% 58%;
-    --secondary-foreground: 255 255 255;
+    /* Secondary - warm coral */
+    --secondary: 14 83% 73%;
+    --secondary-foreground: 0 0% 100%;
 
-    /* Life domain colors */
-    --health: 142 71% 45%;
-    --health-foreground: 255 255 255;
-    --finance: 38 92% 50%;
-    --finance-foreground: 255 255 255;
-    --calendar: 217 91% 60%;
-    --calendar-foreground: 255 255 255;
-    --mood: 290 84% 60%;
-    --mood-foreground: 255 255 255;
+    /* Life domain colors - warm and inviting */
+    --health: 158 64% 52%;
+    --health-foreground: 0 0% 100%;
+    --finance: 220 70% 50%;
+    --finance-foreground: 0 0% 100%;
+    --calendar: 262 83% 58%;
+    --calendar-foreground: 0 0% 100%;
+    --mood: 14 83% 73%;
+    --mood-foreground: 0 0% 100%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 10 20% 95%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 213 94% 68%;
-    --accent-foreground: 255 255 255;
+    --accent: 158 64% 52%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 213 94% 68%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 158 64% 52%;
 
-    /* Gradients for premium feel */
-    --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(262 83% 58%));
-    --gradient-health: linear-gradient(135deg, hsl(142 71% 45%), hsl(167 82% 51%));
-    --gradient-finance: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
-    --gradient-calendar: linear-gradient(135deg, hsl(217 91% 60%), hsl(213 94% 68%));
-    --gradient-subtle: linear-gradient(180deg, hsl(248 250 252), hsl(241 245 249));
+    /* Warm gradients for welcoming feel */
+    --gradient-primary: linear-gradient(135deg, hsl(158 64% 52%), hsl(158 64% 42%));
+    --gradient-health: linear-gradient(135deg, hsl(158 64% 52%), hsl(142 71% 45%));
+    --gradient-finance: linear-gradient(135deg, hsl(220 70% 50%), hsl(230 70% 45%));
+    --gradient-calendar: linear-gradient(135deg, hsl(262 83% 58%), hsl(252 83% 53%));
+    --gradient-mood: linear-gradient(135deg, hsl(14 83% 73%), hsl(24 83% 68%));
+    --gradient-subtle: linear-gradient(180deg, hsl(10 20% 98%), hsl(10 15% 96%));
 
-    /* Shadows for depth */
-    --shadow-soft: 0 4px 16px hsl(213 94% 68% / 0.1);
-    --shadow-card: 0 2px 8px hsl(215 25% 27% / 0.08);
-    --shadow-widget: 0 1px 4px hsl(215 25% 27% / 0.05);
+    /* Softer shadows */
+    --shadow-soft: 0 8px 25px hsl(158 64% 52% / 0.15);
+    --shadow-card: 0 4px 12px hsl(215 25% 16% / 0.08);
+    --shadow-widget: 0 2px 8px hsl(215 25% 16% / 0.04);
 
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -86,59 +87,60 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 220 39% 11%;
+    --foreground: 0 0% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 39% 11%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 39% 11%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 213 94% 68%;
-    --primary-foreground: 255 255 255;
-    --primary-glow: 213 94% 78%;
+    --primary: 158 64% 52%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 158 64% 62%;
 
-    --secondary: 262 83% 58%;
-    --secondary-foreground: 255 255 255;
+    --secondary: 14 83% 73%;
+    --secondary-foreground: 0 0% 100%;
 
-    --health: 142 71% 45%;
-    --health-foreground: 255 255 255;
-    --finance: 38 92% 50%;
-    --finance-foreground: 255 255 255;
-    --calendar: 217 91% 60%;
-    --calendar-foreground: 255 255 255;
-    --mood: 290 84% 60%;
-    --mood-foreground: 255 255 255;
+    --health: 158 64% 52%;
+    --health-foreground: 0 0% 100%;
+    --finance: 220 70% 50%;
+    --finance-foreground: 0 0% 100%;
+    --calendar: 262 83% 58%;
+    --calendar-foreground: 0 0% 100%;
+    --mood: 14 83% 73%;
+    --mood-foreground: 0 0% 100%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 218 11% 65%;
 
-    --accent: 213 94% 68%;
-    --accent-foreground: 255 255 255;
+    --accent: 158 64% 52%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 213 94% 68%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 158 64% 52%;
 
     /* Dark mode gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(213 94% 68%), hsl(262 83% 58%));
-    --gradient-health: linear-gradient(135deg, hsl(142 71% 45%), hsl(167 82% 51%));
-    --gradient-finance: linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%));
-    --gradient-calendar: linear-gradient(135deg, hsl(217 91% 60%), hsl(213 94% 68%));
-    --gradient-subtle: linear-gradient(180deg, hsl(222.2 84% 4.9%), hsl(217.2 32.6% 17.5%));
+    --gradient-primary: linear-gradient(135deg, hsl(158 64% 52%), hsl(158 64% 42%));
+    --gradient-health: linear-gradient(135deg, hsl(158 64% 52%), hsl(142 71% 45%));
+    --gradient-finance: linear-gradient(135deg, hsl(220 70% 50%), hsl(230 70% 45%));
+    --gradient-calendar: linear-gradient(135deg, hsl(262 83% 58%), hsl(252 83% 53%));
+    --gradient-mood: linear-gradient(135deg, hsl(14 83% 73%), hsl(24 83% 68%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 39% 11%), hsl(215 28% 17%));
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-background: 220 39% 11%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 158 64% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 215 28% 17%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 215 28% 17%;
+    --sidebar-ring: 158 64% 52%;
   }
 }
 
