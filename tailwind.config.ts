@@ -18,6 +18,22 @@ export default {
 			}
 		},
 		extend: {
+			backgroundImage: {
+				'gradient-primary': 'var(--gradient-primary)',
+				'gradient-health': 'var(--gradient-health)',
+				'gradient-finance': 'var(--gradient-finance)',
+				'gradient-calendar': 'var(--gradient-calendar)',
+				'gradient-subtle': 'var(--gradient-subtle)'
+			},
+			boxShadow: {
+				'soft': 'var(--shadow-soft)',
+				'card': 'var(--shadow-card)',
+				'widget': 'var(--shadow-widget)'
+			},
+			transitionTimingFunction: {
+				'smooth': 'var(--transition-smooth)',
+				'bounce': 'var(--transition-bounce)'
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -26,7 +42,8 @@ export default {
 				foreground: 'hsl(var(--foreground))',
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))'
+					foreground: 'hsl(var(--primary-foreground))',
+					glow: 'hsl(var(--primary-glow))'
 				},
 				secondary: {
 					DEFAULT: 'hsl(var(--secondary))',
@@ -51,6 +68,22 @@ export default {
 				card: {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
+				},
+				health: {
+					DEFAULT: 'hsl(var(--health))',
+					foreground: 'hsl(var(--health-foreground))'
+				},
+				finance: {
+					DEFAULT: 'hsl(var(--finance))',
+					foreground: 'hsl(var(--finance-foreground))'
+				},
+				calendar: {
+					DEFAULT: 'hsl(var(--calendar))',
+					foreground: 'hsl(var(--calendar-foreground))'
+				},
+				mood: {
+					DEFAULT: 'hsl(var(--mood))',
+					foreground: 'hsl(var(--mood-foreground))'
 				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
