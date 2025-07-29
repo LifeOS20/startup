@@ -1,0 +1,7 @@
+project.ext.react = [
+    enableHermes: true,
+    bundleInDebug: false,
+    bundleInRelease: true,
+    devDisabledInRelease: true,
+    entryFile: "index.js"
+]
