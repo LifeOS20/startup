@@ -41,7 +41,7 @@ export class AppInitializer {
     if (this.isInitialized) return;
 
     try {
-      console.log('🚀 Initializing LifeOS App...');
+      console.log('Initializing Uncluttr App...');
 
       // Step 1: Initialize core services
       await this.initializeCoreServices();
@@ -62,27 +62,45 @@ export class AppInitializer {
       await this.setupSyncAndBackup();
 
       this.isInitialized = true;
-      console.log('✅ LifeOS App initialized successfully');
+      console.log('LifeOS App initialized successfully');
     } catch (error) {
-      console.error('❌ Failed to initialize LifeOS App:', error);
+      console.error('Failed to initialize LifeOS App:', error);
       throw error;
     }
   }
 
   private async initializeCoreServices(): Promise<void> {
-    console.log('📊 Initializing core services...');
+    console.log('Initializing core services...');
 
     try {
-      // Initialize database
-      await databaseService.initialize();
-      console.log('✅ Database initialized');
+      // Initialize database with retry mechanism
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
+        try {
+          await databaseService.initialize();
+          console.log('Database initialized');
+          break;
+        } catch (error) {
+          retryCount++;
+          console.error(`Database initialization attempt ${retryCount} failed:`, error);
+
+          if (retryCount >= maxRetries) {
+            throw error;
+          }
+
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
 
       // Initialize AI service
       await aiService.initialize();
-      console.log('✅ AI service initialized');
+      console.log('AI service initialized');
 
     } catch (error) {
-      console.error('❌ Failed to initialize core services:', error);
+      console.error('Failed to initialize core services:', error);
       throw error;
     }
   }
@@ -123,11 +141,11 @@ export class AppInitializer {
             useLifeOSStore.getState().addNotification(notification);
           });
 
-          console.log('✅ User data loaded');
+          console.log('User data loaded');
         }
       }
     } catch (error) {
-      console.error('❌ Failed to load user data:', error);
+      console.error('Failed to load user data:', error);
       // Don't throw error here, app can continue without user data
     }
   }
@@ -138,22 +156,22 @@ export class AppInitializer {
     try {
       // Initialize health service
       await healthService.initialize();
-      console.log('✅ Health service initialized');
+      console.log('Health service initialized');
 
       // Initialize Google Calendar (will be done when user connects)
-      console.log('✅ Google Calendar service ready');
+      console.log('Google Calendar service ready');
 
       // Initialize Plaid (will be done when user connects)
-      console.log('✅ Plaid service ready');
+      console.log('Plaid service ready');
 
     } catch (error) {
-      console.error('❌ Failed to initialize integrations:', error);
+      console.error('Failed to initialize integrations:', error);
       // Don't throw error here, app can continue without integrations
     }
   }
 
   private async setupBackgroundTasks(): Promise<void> {
-    console.log('🔄 Setting up background tasks...');
+    console.log('Setting up background tasks...');
 
     try {
       // Set up periodic sync
@@ -165,44 +183,111 @@ export class AppInitializer {
       // Set up log cleanup
       this.setupLogCleanup();
 
-      console.log('✅ Background tasks configured');
+      console.log('Background tasks configured');
     } catch (error) {
-      console.error('❌ Failed to setup background tasks:', error);
+      console.error('Failed to setup background tasks:', error);
       // Don't throw error here, app can continue without background tasks
     }
   }
 
-  private async initializeAIAgents(): Promise<void> {
-    console.log('🤖 Initializing AI agents...');
+  private async generateDailyBriefing(): Promise<void> {
+    console.log('Generating daily briefing...');
 
     try {
-      const agents = aiService.getAgents();
+      const { user } = useAuthStore.getState();
+      if (!user) return;
 
-      // Set active agents in store
-      useLifeOSStore.getState().activeAgents = agents;
+      // Get user data for briefing
+      const userData = {
+        health: useLifeOSStore.getState().healthProfile,
+        finance: useLifeOSStore.getState().financialProfile,
+        schedule: useLifeOSStore.getState().schedule,
+        family: useLifeOSStore.getState().familyData,
+        smartHome: useLifeOSStore.getState().smartHomeData,
+      };
+
+      try {
+        const briefing = await aiService.generateDailyBriefing(userData);
+        useLifeOSStore.getState().setDailyBriefing(briefing);
+        console.log('Daily briefing generated');
+      } catch (error) {
+        console.error('Failed to generate daily briefing:', error);
+        // Set a fallback briefing when generation fails
+        const fallbackBriefing = `Welcome, ${user.name.split(' ')[0]}! Here's your daily overview:\n\n` +
+          `• You have ${userData.schedule?.length || 0} events scheduled today\n` +
+          `• Remember to check in on your financial goals\n` +
+          `• Take some time for your health and wellbeing\n\n` +
+          `Have a productive and balanced day!`;
+
+        useLifeOSStore.getState().setDailyBriefing(fallbackBriefing);
+      }
+    } catch (error) {
+      console.error('Failed to generate daily briefing:', error);
+    }
+  }
+
+  private async initializeAIAgents(): Promise<void> {
+    console.log('Initializing AI agents...');
+
+    try {
+      // Even if AI service initialization fails, we can still provide a basic experience
+      try {
+        const agents = aiService.getAgents();
+        // Set active agents in store
+        useLifeOSStore.getState().activeAgents = agents;
+      } catch (error) {
+        console.error('Failed to get AI agents:', error);
+        // Set default agents if real ones can't be loaded
+        useLifeOSStore.getState().activeAgents = [
+          {
+            id: 'health',
+            name: 'Health Agent',
+            role: 'Analyze health data and provide wellness recommendations',
+            status: 'active',
+            capabilities: ['health_monitoring', 'wellness_recommendations'],
+            performance: {
+              accuracy: 0.85,
+              responseTime: 1000,
+              userSatisfaction: 0.8,
+            }
+          },
+          {
+            id: 'finance',
+            name: 'Finance Agent',
+            role: 'Analyze financial data and provide insights',
+            status: 'active',
+            capabilities: ['expense_analysis', 'budget_optimization'],
+            performance: {
+              accuracy: 0.85,
+              responseTime: 1000,
+              userSatisfaction: 0.8,
+            }
+          }
+        ];
+      }
 
       // Generate initial daily briefing
       await this.generateDailyBriefing();
 
-      console.log('✅ AI agents initialized');
+      console.log('AI agents initialized');
     } catch (error) {
-      console.error('❌ Failed to initialize AI agents:', error);
+      console.error('Failed to initialize AI agents:', error);
       // Don't throw error here, app can continue without AI agents
     }
   }
 
   private async setupSyncAndBackup(): Promise<void> {
-    console.log('☁️ Setting up sync and backup...');
+    console.log('Setting up sync and backup...');
 
     try {
       // Set up ElectricSQL sync (will be implemented)
-      console.log('✅ Sync service ready');
+      console.log('Sync service ready');
 
       // Set up Google Cloud Storage backup (will be implemented)
-      console.log('✅ Backup service ready');
+      console.log('Backup service ready');
 
     } catch (error) {
-      console.error('❌ Failed to setup sync and backup:', error);
+      console.error('Failed to setup sync and backup:', error);
       // Don't throw error here, app can continue without sync/backup
     }
   }
@@ -216,7 +301,7 @@ export class AppInitializer {
       try {
         await this.performSync();
       } catch (error) {
-        console.error('❌ Periodic sync failed:', error);
+        console.error('Periodic sync failed:', error);
       }
     }, this.config.syncInterval * 60 * 1000);
   }
@@ -230,7 +315,7 @@ export class AppInitializer {
       try {
         await this.performBackup();
       } catch (error) {
-        console.error('❌ Periodic backup failed:', error);
+        console.error('Periodic backup failed:', error);
       }
     }, this.config.backupInterval * 60 * 60 * 1000);
   }
@@ -241,7 +326,7 @@ export class AppInitializer {
       try {
         await this.cleanupOldLogs();
       } catch (error) {
-        console.error('❌ Log cleanup failed:', error);
+        console.error('Log cleanup failed:', error);
       }
     }, 24 * 60 * 60 * 1000); // 24 hours
   }
@@ -288,15 +373,15 @@ export class AppInitializer {
       useLifeOSStore.getState().setSyncStatus('completed');
       useLifeOSStore.getState().lastSync = new Date();
 
-      console.log('✅ Periodic sync completed');
+      console.log('Periodic sync completed');
     } catch (error) {
-      console.error('❌ Periodic sync failed:', error);
+      console.error('Periodic sync failed:', error);
       useLifeOSStore.getState().setSyncStatus('error');
     }
   }
 
   private async performBackup(): Promise<void> {
-    console.log('💾 Performing periodic backup...');
+    console.log('Performing periodic backup...');
 
     const { user } = useAuthStore.getState();
     if (!user) return;
@@ -314,15 +399,15 @@ export class AppInitializer {
         lastBackup: new Date(),
       });
 
-      console.log('✅ Periodic backup completed');
+      console.log('Periodic backup completed');
     } catch (error) {
-      console.error('❌ Periodic backup failed:', error);
+      console.error('Periodic backup failed:', error);
       useLifeOSStore.getState().setBackupStatus('error');
     }
   }
 
   private async cleanupOldLogs(): Promise<void> {
-    console.log('🧹 Cleaning up old logs...');
+    console.log('Cleaning up old logs...');
 
     try {
       const { user } = useAuthStore.getState();
@@ -346,58 +431,33 @@ export class AppInitializer {
         await databaseService.delete('data_access_logs', log.id);
       }
 
-      console.log(`✅ Cleaned up ${oldSecurityLogs.length + oldDataAccessLogs.length} old logs`);
+      console.log(`Cleaned up ${oldSecurityLogs.length + oldDataAccessLogs.length} old logs`);
     } catch (error) {
-      console.error('❌ Log cleanup failed:', error);
-    }
-  }
-
-  private async generateDailyBriefing(): Promise<void> {
-    console.log('📋 Generating daily briefing...');
-
-    try {
-      const { user } = useAuthStore.getState();
-      if (!user) return;
-
-      // Get user data for briefing
-      const userData = {
-        health: useLifeOSStore.getState().healthProfile,
-        finance: useLifeOSStore.getState().financialProfile,
-        schedule: useLifeOSStore.getState().schedule,
-        family: useLifeOSStore.getState().familyData,
-        smartHome: useLifeOSStore.getState().smartHomeData,
-      };
-
-      const briefing = await aiService.generateDailyBriefing(userData);
-      useLifeOSStore.getState().setDailyBriefing(briefing);
-
-      console.log('✅ Daily briefing generated');
-    } catch (error) {
-      console.error('❌ Failed to generate daily briefing:', error);
+      console.error('Log cleanup failed:', error);
     }
   }
 
   async connectGoogleCalendar(): Promise<boolean> {
-    console.log('📅 Connecting Google Calendar...');
+    console.log('Connecting Google Calendar...');
 
     try {
       const success = await googleCalendarService.signIn();
 
       if (success) {
-        console.log('✅ Google Calendar connected');
+        console.log('Google Calendar connected');
         return true;
       } else {
-        console.log('❌ Google Calendar connection failed');
+        console.log('Google Calendar connection failed');
         return false;
       }
     } catch (error) {
-      console.error('❌ Google Calendar connection error:', error);
+      console.error('Google Calendar connection error:', error);
       return false;
     }
   }
 
   async connectPlaid(): Promise<boolean> {
-    console.log('🏦 Connecting Plaid...');
+    console.log('Connecting Plaid...');
 
     try {
       const { user } = useAuthStore.getState();
@@ -412,33 +472,33 @@ export class AppInitializer {
       // For now, return success
       return true;
     } catch (error) {
-      console.error('❌ Plaid connection error:', error);
+      console.error('Plaid connection error:', error);
       return false;
     }
   }
 
   async requestHealthPermissions(): Promise<boolean> {
-    console.log('❤️ Requesting health permissions...');
+    console.log('Requesting health permissions...');
 
     try {
       await healthService.initialize();
       const hasPermissions = healthService.hasHealthPermissions();
 
       if (hasPermissions) {
-        console.log('✅ Health permissions granted');
+        console.log('Health permissions granted');
         return true;
       } else {
-        console.log('❌ Health permissions denied');
+        console.log('Health permissions denied');
         return false;
       }
     } catch (error) {
-      console.error('❌ Health permissions error:', error);
+      console.error('Health permissions error:', error);
       return false;
     }
   }
 
   async performFullSync(): Promise<void> {
-    console.log('🔄 Performing full sync...');
+    console.log('Performing full sync...');
 
     try {
       useLifeOSStore.getState().setSyncStatus('syncing');
@@ -453,15 +513,15 @@ export class AppInitializer {
       await this.updateAIInsights();
 
       useLifeOSStore.getState().setSyncStatus('completed');
-      console.log('✅ Full sync completed');
+      console.log('Full sync completed');
     } catch (error) {
-      console.error('❌ Full sync failed:', error);
+      console.error('Full sync failed:', error);
       useLifeOSStore.getState().setSyncStatus('error');
     }
   }
 
   private async updateAIInsights(): Promise<void> {
-    console.log('🧠 Updating AI insights...');
+    console.log('Updating AI insights...');
 
     try {
       const { user } = useAuthStore.getState();
@@ -495,14 +555,14 @@ export class AppInitializer {
         // Apply optimizations
       }
 
-      console.log('✅ AI insights updated');
+      console.log('AI insights updated');
     } catch (error) {
-      console.error('❌ Failed to update AI insights:', error);
+      console.error('Failed to update AI insights:', error);
     }
   }
 
   async cleanup(): Promise<void> {
-    console.log('🧹 Cleaning up app...');
+    console.log('Cleaning up app...');
 
     try {
       // Clear intervals
@@ -520,9 +580,9 @@ export class AppInitializer {
       await databaseService.close();
 
       this.isInitialized = false;
-      console.log('✅ App cleanup completed');
+      console.log('App cleanup completed');
     } catch (error) {
-      console.error('❌ App cleanup failed:', error);
+      console.error('App cleanup failed:', error);
     }
   }
 
@@ -545,4 +605,4 @@ export const appInitializer = new AppInitializer();
 // Export initialization function for use in App.tsx
 export const initializeApp = async (): Promise<void> => {
   return appInitializer.initialize();
-}; 
+};

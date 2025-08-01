@@ -1,204 +1,137 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
-  FlatList,
+  StyleSheet,
   Dimensions,
-  Animated,
-  Image,
-  ActivityIndicator,
+  ScrollView,
+  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuthStore } from '../stores/authStore';
-import { lifeOSAI } from '../lib/ai-service';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
 interface OnboardingSlide {
-  id: string;
   title: string;
+  subtitle: string;
   description: string;
-  image: string;
-  aiTip?: string;
 }
 
-const OnboardingScreen = () => {
-  const [slides, setSlides] = useState<OnboardingSlide[]>([
-    {
-      id: '1',
-      title: 'Welcome to LifeOS',
-      description: 'Your personal CEO for life management. Organize, optimize, and orchestrate all aspects of your life in one place.',
-      image: '🚀',
-    },
-    {
-      id: '2',
-      title: 'Holistic Integration',
-      description: 'Manage your health, finances, schedule, family, and smart home from a single dashboard.',
-      image: '🔄',
-    },
-    {
-      id: '3',
-      title: 'AI-Powered Insights',
-      description: 'Get personalized recommendations and insights to optimize your daily life and prevent burnout.',
-      image: '🧠',
-    },
-    {
-      id: '4',
-      title: 'Privacy First',
-      description: 'Your sensitive data stays on your device with local processing for maximum privacy and security.',
-      image: '🔒',
-    },
-    {
-      id: '5',
-      title: 'Ready to Start?',
-      description: 'Take control of your life with LifeOS - your personal life operating system.',
-      image: '✨',
-    },
-  ]);
+const slides: OnboardingSlide[] = [
+  {
+    title: "Welcome to Uncluttr",
+    subtitle: "Your Personal Life CEO",
+    description: "Simplify your life with intelligent automation and seamless organization."
+  },
+  {
+    title: "AI-Powered Insights",
+    subtitle: "Smart Decisions Made Simple",
+    description: "Get personalized recommendations and insights to optimize your daily routine."
+  },
+  {
+    title: "Unified Life Management",
+    subtitle: "Everything in One Place",
+    description: "Health, finance, schedule, and family - all unified in one elegant interface."
+  }
+];
 
+interface OnboardingScreenProps {
+  navigation?: any;
+  onComplete?: () => void;
+}
+
+const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation, onComplete }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoadingTips, setIsLoadingTips] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
-  const { completeOnboarding } = useAuthStore();
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  // Generate AI tips for each slide on component mount
-  useEffect(() => {
-    generateAITips();
-  }, []);
+  const handleScroll = (event: any) => {
+    const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+    setCurrentIndex(slideIndex);
+  };
 
-  const generateAITips = async () => {
-    setIsLoadingTips(true);
+  const goToSlide = (index: number) => {
+    setCurrentIndex(index);
+    scrollViewRef.current?.scrollTo({ x: index * width, animated: true });
+  };
+
+  const completeOnboarding = async () => {
     try {
-      const updatedSlides = [...slides];
-
-      // Generate tips for each slide
-      for (let i = 0; i < updatedSlides.length; i++) {
-        const slide = updatedSlides[i];
-        const prompt = `Generate a brief, helpful tip related to the following onboarding slide for a personal life management app:
-        
-        Slide Title: ${slide.title}
-        Slide Description: ${slide.description}
-        
-        Provide a concise, practical tip that enhances the user's understanding of this feature or concept. Keep it under 100 characters.`;
-
-        try {
-          const tip = await lifeOSAI.generateText ? await lifeOSAI.generateText(prompt, 100) : getDefaultTip(i);
-          updatedSlides[i] = {
-            ...slide,
-            aiTip: tip || getDefaultTip(i),
-          };
-        } catch (error) {
-          console.error(`Failed to generate tip for slide ${i}:`, error);
-          updatedSlides[i] = {
-            ...slide,
-            aiTip: getDefaultTip(i),
-          };
-        }
+      await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+      // Call the onComplete function passed from App.tsx
+      if (onComplete) {
+        onComplete();
       }
-
-      setSlides(updatedSlides);
     } catch (error) {
-      console.error('Failed to generate AI tips:', error);
-    } finally {
-      setIsLoadingTips(false);
+      console.error('Failed to complete onboarding:', error);
     }
   };
 
-  const getDefaultTip = (index: number): string => {
-    const defaultTips = [
-      'Set up your profile completely for personalized recommendations.',
-      'Connect your health and finance apps for better insights.',
-      'Enable notifications to get timely AI insights.',
-      'Review privacy settings regularly to maintain control.',
-      'Start with one area of focus and gradually expand.',
-    ];
-    return defaultTips[index] || defaultTips[0];
-  };
-
-  const scrollTo = () => {
+  const handleNext = () => {
     if (currentIndex < slides.length - 1) {
-      flatListRef.current?.scrollToIndex({
-        index: currentIndex + 1,
-        animated: true,
-      });
+      goToSlide(currentIndex + 1);
     } else {
       completeOnboarding();
     }
   };
 
-  const viewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems[0]) {
-      setCurrentIndex(viewableItems[0].index);
-    }
-  }).current;
-
-  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+  const handleSkip = () => {
+    completeOnboarding();
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList
-        data={slides}
-        renderItem={({ item }) => (
-          <View style={styles.slide}>
-            <Text style={styles.image}>{item.image}</Text>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.description}>{item.description}</Text>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-            {isLoadingTips ? (
-              <View style={styles.tipContainer}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.tipLoadingText}>Generating tip...</Text>
-              </View>
-            ) : item.aiTip ? (
-              <View style={styles.tipContainer}>
-                <Text style={styles.tipTitle}>AI Tip:</Text>
-                <Text style={styles.tipText}>{item.aiTip}</Text>
-              </View>
-            ) : null}
-          </View>
-        )}
+      {/* Skip Button */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
+          <Text style={styles.skipText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Carousel */}
+      <ScrollView
+        ref={scrollViewRef}
         horizontal
-        showsHorizontalScrollIndicator={false}
         pagingEnabled
-        bounces={false}
-        keyExtractor={(item) => item.id}
-        onViewableItemsChanged={viewableItemsChanged}
-        viewabilityConfig={viewConfig}
-        ref={flatListRef}
-      />
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        style={styles.scrollView}
+      >
+        {slides.map((slide, index) => (
+          <View key={index} style={styles.slide}>
+            <View style={styles.content}>
+              <Text style={styles.title}>Uncluttr</Text>
+              <Text style={styles.subtitle}>{slide.subtitle}</Text>
+              <Text style={styles.description}>{slide.description}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
 
+      {/* Indicators */}
       <View style={styles.indicatorContainer}>
         {slides.map((_, index) => (
-          <View
+          <TouchableOpacity
             key={index}
             style={[
               styles.indicator,
-              currentIndex === index ? styles.activeIndicator : null,
+              currentIndex === index && styles.activeIndicator
             ]}
+            onPress={() => goToSlide(index)}
           />
         ))}
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, styles.nextButton]}
-          onPress={scrollTo}
-        >
-          <Text style={styles.buttonText}>
+      {/* Bottom Button */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <Text style={styles.nextText}>
             {currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
           </Text>
         </TouchableOpacity>
-
-        {currentIndex < slides.length - 1 && (
-          <TouchableOpacity
-            style={[styles.button, styles.skipButton]}
-            onPress={() => completeOnboarding()}
-          >
-            <Text style={styles.skipButtonText}>Skip</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -207,106 +140,89 @@ const OnboardingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  flatListContainer: {
-    flex: 3,
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    alignItems: 'flex-end',
+  },
+  skipButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+  },
+  skipText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  scrollView: {
+    flex: 1,
   },
   slide: {
     width,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    paddingHorizontal: 40,
   },
-  image: {
-    fontSize: 100,
-    marginBottom: 40,
+  content: {
+    alignItems: 'center',
+    marginBottom: 100,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#212529',
+    fontSize: 48,
+    fontWeight: '300',
+    color: '#111827',
+    marginBottom: 20,
+    letterSpacing: -2,
+    fontFamily: 'System',
+  },
+  subtitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#111827',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    lineHeight: 32,
   },
   description: {
     fontSize: 16,
-    color: '#6c757d',
+    color: '#6B7280',
     textAlign: 'center',
-    paddingHorizontal: 20,
     lineHeight: 24,
+    paddingHorizontal: 20,
   },
   indicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 20,
+    paddingVertical: 20,
   },
   indicator: {
-    height: 10,
-    width: 10,
-    borderRadius: 5,
-    backgroundColor: '#007AFF',
-    marginHorizontal: 5,
-    opacity: 0.3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 4,
   },
   activeIndicator: {
-    opacity: 1,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#111827',
+    width: 24,
   },
-  buttonContainer: {
-    flex: 1,
-    width: '100%',
+  footer: {
     paddingHorizontal: 40,
-    justifyContent: 'center',
-  },
-  button: {
-    height: 50,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    paddingBottom: 40,
   },
   nextButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#111827',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
-  skipButton: {
-    backgroundColor: 'transparent',
-  },
-  buttonText: {
-    color: '#ffffff',
+  nextText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  skipButtonText: {
-    color: '#6c757d',
-    fontSize: 16,
-  },
-  tipContainer: {
-    backgroundColor: '#f0f7ff',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 16,
-    marginHorizontal: 20,
-    borderLeftWidth: 3,
-    borderLeftColor: '#007AFF',
-    maxWidth: width - 40,
-  },
-  tipTitle: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginBottom: 4,
-    color: '#343a40',
-  },
-  tipText: {
-    fontSize: 13,
-    color: '#495057',
-    lineHeight: 18,
-  },
-  tipLoadingText: {
-    fontSize: 13,
-    color: '#6c757d',
-    marginLeft: 8,
   },
 });
 

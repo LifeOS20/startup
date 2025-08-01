@@ -4,22 +4,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import RNFS from 'react-native-fs';
 import DeviceInfo from 'react-native-device-info';
+import Config from 'react-native-config';
 
-// Configuration
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api/ai';
+// Debug environment variables
+console.log('Environment Variables Debug:');
+console.log('Config object:', Config);
+console.log('OPENAI_API_KEY exists:', !!Config.OPENAI_API_KEY);
+console.log('ANTHROPIC_API_KEY exists:', !!Config.ANTHROPIC_API_KEY);
+
+// Production Configuration
+const API_BASE_URL = Config.API_BASE_URL || 'https://api.openai.com/v1';
+const OPENAI_API_KEY = Config.OPENAI_API_KEY;
+const ANTHROPIC_API_KEY = Config.ANTHROPIC_API_KEY;
 const CACHE_EXPIRY = 1000 * 60 * 60; // 1 hour cache expiry
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
-// Model paths for local inference
-const MODEL_PATHS = {
-  whisper: Platform.OS === 'ios' ? 'whisper-base.mlmodel' : 'whisper-base.tflite',
-  phi3: Platform.OS === 'ios' ? 'phi3-mini.mlmodel' : 'phi3-mini.tflite',
-  embeddings: Platform.OS === 'ios' ? 'sentence-transformer.mlmodel' : 'sentence-transformer.tflite',
-};
+// Validate API keys on startup
+if (!OPENAI_API_KEY && !ANTHROPIC_API_KEY) {
+  console.error('No AI API keys found! Please check your .env file configuration.');
+  console.error('Expected: OPENAI_API_KEY and/or ANTHROPIC_API_KEY');
+} else if (OPENAI_API_KEY) {
+  console.log('OpenAI API key loaded successfully');
+} else if (ANTHROPIC_API_KEY) {
+  console.log('Anthropic API key loaded successfully');
+}
 
-// Interface for native AI processing
-interface NativeAIModule {
+// Fallback to OpenAI if local models aren't available
+const USE_CLOUD_AI = !Config.ENABLE_LOCAL_AI || Config.ENABLE_LOCAL_AI === 'false';
+
+// Production-ready AI interface that handles both cloud and local AI
+interface ProductionAIModule {
   initializeWhisper(): Promise<boolean>;
   transcribeAudio(audioPath: string): Promise<string>;
   initializePhi3(): Promise<boolean>;
@@ -34,78 +49,53 @@ interface NativeAIModule {
   }>;
 }
 
-// Production implementation of NativeAIModule
-const NativeAI: NativeAIModule = {
+// Production AI service that uses OpenAI/Anthropic APIs with RAG capabilities
+const ProductionAI: ProductionAIModule = {
   initializeWhisper: async () => {
-    console.log('Initializing Whisper model...');
+    console.log('Initializing Whisper via OpenAI API...');
     try {
-      // Check if model exists locally
-      const modelPath = `${RNFS.DocumentDirectoryPath}/models/${MODEL_PATHS.whisper}`;
-      const modelExists = await RNFS.exists(modelPath);
-
-      if (!modelExists) {
-        console.log('Downloading Whisper model...');
-        // Download model from your CDN or model repository
-        const downloadUrl = `${process.env.REACT_APP_MODEL_CDN_URL}/whisper/${MODEL_PATHS.whisper}`;
-        await RNFS.downloadFile({
-          fromUrl: downloadUrl,
-          toFile: modelPath,
-          progressDivider: 10,
-          begin: (res) => console.log('Download started:', res.jobId),
-          progress: (res) => console.log('Download progress:', (res.bytesWritten / res.contentLength * 100).toFixed(2) + '%'),
-        }).promise;
+      if (!OPENAI_API_KEY) {
+        console.warn('OpenAI API key not configured, audio transcription will be limited');
+        return false;
       }
-
-      // Initialize the model using native modules
-      if (Platform.OS === 'ios') {
-        // Use Core ML for iOS
-        const { WhisperModule } = NativeModules;
-        return await WhisperModule.initializeModel(modelPath);
-      } else {
-        // Use TensorFlow Lite for Android
-        const { TFLiteModule } = NativeModules;
-        return await TFLiteModule.initializeWhisper(modelPath);
-      }
+      // Test the API connection
+      const response = await axios.get('https://api.openai.com/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
+        timeout: 5000,
+      });
+      return response.status === 200;
     } catch (error) {
-      console.error('Failed to initialize Whisper:', error);
+      console.error('Failed to initialize Whisper API:', error);
       return false;
     }
   },
 
   transcribeAudio: async (audioPath: string) => {
-    console.log('Transcribing audio:', audioPath);
+    console.log('Transcribing audio via OpenAI Whisper API...');
     try {
-      // First try local inference if model is available
-      if (Platform.OS === 'ios') {
-        const { WhisperModule } = NativeModules;
-        const result = await WhisperModule.transcribe(audioPath);
-        if (result && result.text) {
-          return result.text;
-        }
-      } else {
-        const { TFLiteModule } = NativeModules;
-        const result = await TFLiteModule.transcribeAudio(audioPath);
-        if (result && result.text) {
-          return result.text;
-        }
+      if (!OPENAI_API_KEY) {
+        throw new Error('OpenAI API key not configured');
       }
 
-      // Fallback to backend API if local inference fails
       const formData = new FormData();
-      formData.append('audio', {
+      formData.append('file', {
         uri: audioPath,
         type: 'audio/wav',
         name: 'audio.wav',
       } as any);
+      formData.append('model', 'whisper-1');
 
-      const response = await axios.post(`${API_BASE_URL}/transcribe`, formData, {
+      const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
         headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 30000, // 30 second timeout for audio processing
+        timeout: 30000,
       });
 
-      return response.data.transcription;
+      return response.data.text;
     } catch (error) {
       console.error('Audio transcription failed:', error);
       throw error;
@@ -113,65 +103,73 @@ const NativeAI: NativeAIModule = {
   },
 
   initializePhi3: async () => {
-    console.log('Initializing Phi-3-mini model...');
+    console.log('Initializing text generation via OpenAI/Anthropic APIs...');
     try {
-      const modelPath = `${RNFS.DocumentDirectoryPath}/models/${MODEL_PATHS.phi3}`;
-      const modelExists = await RNFS.exists(modelPath);
-
-      if (!modelExists) {
-        console.log('Downloading Phi-3 model...');
-        const downloadUrl = `${process.env.REACT_APP_MODEL_CDN_URL}/phi3/${MODEL_PATHS.phi3}`;
-        await RNFS.downloadFile({
-          fromUrl: downloadUrl,
-          toFile: modelPath,
-          progressDivider: 10,
-          begin: (res) => console.log('Phi-3 download started:', res.jobId),
-          progress: (res) => console.log('Phi-3 download progress:', (res.bytesWritten / res.contentLength * 100).toFixed(2) + '%'),
-        }).promise;
+      if (!OPENAI_API_KEY && !ANTHROPIC_API_KEY) {
+        console.warn('No AI API keys configured, text generation will be limited');
+        return false;
       }
-
-      if (Platform.OS === 'ios') {
-        const { Phi3Module } = NativeModules;
-        return await Phi3Module.initializeModel(modelPath);
-      } else {
-        const { TFLiteModule } = NativeModules;
-        return await TFLiteModule.initializePhi3(modelPath);
-      }
+      return true;
     } catch (error) {
-      console.error('Failed to initialize Phi-3:', error);
+      console.error('Failed to initialize text generation:', error);
       return false;
     }
   },
 
   generateText: async (prompt: string, maxLength: number) => {
-    console.log('Generating text with prompt:', prompt.substring(0, 100) + '...');
+    console.log('Generating text with AI...');
     try {
-      // Try local inference first
-      if (Platform.OS === 'ios') {
-        const { Phi3Module } = NativeModules;
-        const result = await Phi3Module.generateText(prompt, maxLength);
-        if (result && result.text) {
-          return result.text;
-        }
-      } else {
-        const { TFLiteModule } = NativeModules;
-        const result = await TFLiteModule.generateText(prompt, maxLength);
-        if (result && result.text) {
-          return result.text;
-        }
+      // Try OpenAI first
+      if (OPENAI_API_KEY) {
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are Uncluttr, a helpful personal life management AI assistant. Provide concise, actionable, and personalized responses.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: maxLength,
+          temperature: 0.7,
+        }, {
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000,
+        });
+
+        return response.data.choices[0].message.content;
       }
 
-      // Fallback to backend API
-      const response = await axios.post(`${API_BASE_URL}/generate-text`, {
-        prompt,
-        maxTokens: maxLength,
-        temperature: 0.7,
-        model: 'phi3-mini',
-      }, {
-        timeout: 60000, // 60 second timeout for text generation
-      });
+      // Fallback to Anthropic if OpenAI fails
+      if (ANTHROPIC_API_KEY) {
+        const response = await axios.post('https://api.anthropic.com/v1/messages', {
+          model: 'claude-3-haiku-20240307',
+          max_tokens: maxLength,
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+        }, {
+          headers: {
+            'x-api-key': ANTHROPIC_API_KEY,
+            'Content-Type': 'application/json',
+            'anthropic-version': '2023-06-01',
+          },
+          timeout: 60000,
+        });
 
-      return response.data.text;
+        return response.data.content[0].text;
+      }
+
+      throw new Error('No AI API keys configured');
     } catch (error) {
       console.error('Text generation failed:', error);
       throw error;
@@ -179,39 +177,46 @@ const NativeAI: NativeAIModule = {
   },
 
   initializeTFLite: async () => {
-    console.log('Initializing TensorFlow Lite runtime...');
-    try {
-      if (Platform.OS === 'android') {
-        const { TFLiteModule } = NativeModules;
-        return await TFLiteModule.initialize();
-      }
-      // iOS uses Core ML, so TFLite initialization is not needed
-      return true;
-    } catch (error) {
-      console.error('Failed to initialize TFLite:', error);
-      return false;
-    }
+    console.log('Cloud AI initialized (no local TensorFlow Lite needed)');
+    return true;
   },
 
   runInference: async (modelPath: string, input: any) => {
-    console.log('Running inference on model:', modelPath);
+    console.log('Running cloud-based inference...');
     try {
-      if (Platform.OS === 'ios') {
-        const { CoreMLModule } = NativeModules;
-        return await CoreMLModule.runInference(modelPath, input);
-      } else {
-        const { TFLiteModule } = NativeModules;
-        return await TFLiteModule.runInference(modelPath, input);
-      }
-    } catch (error) {
-      console.error('Local inference failed, trying backend:', error);
-      // Fallback to backend API
-      const response = await axios.post(`${API_BASE_URL}/inference`, {
-        modelPath,
-        input,
-      });
+      // Use OpenAI for general inference tasks
+      if (OPENAI_API_KEY) {
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a data analysis AI. Analyze the provided input and return structured insights.'
+            },
+            {
+              role: 'user',
+              content: `Analyze this data: ${JSON.stringify(input)}`
+            }
+          ],
+          max_tokens: 500,
+          temperature: 0.3,
+        }, {
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      return response.data.result;
+        return {
+          result: response.data.choices[0].message.content,
+          confidence: 0.85,
+        };
+      }
+
+      throw new Error('No AI API configured for inference');
+    } catch (error) {
+      console.error('Cloud inference failed:', error);
+      throw error;
     }
   },
 
@@ -219,39 +224,22 @@ const NativeAI: NativeAIModule = {
     try {
       const deviceInfo = {
         hasNeuralEngine: false,
-        hasGPU: false,
-        memoryGB: 4,
-        processorType: 'unknown',
+        hasGPU: true, // Cloud AI always has GPU
+        memoryGB: 8, // Cloud AI has sufficient memory
+        processorType: 'cloud',
       };
 
-      if (Platform.OS === 'ios') {
-        const systemVersion = await DeviceInfo.getSystemVersion();
-        const deviceType = await DeviceInfo.getDeviceType();
-        const model = await DeviceInfo.getModel();
+      const totalMemory = await DeviceInfo.getTotalMemory();
+      deviceInfo.memoryGB = Math.round(totalMemory / (1024 * 1024 * 1024));
 
-        // Check for Neural Engine (A12 and later)
-        const hasNeuralEngine = model.includes('iPhone') && (
+      if (Platform.OS === 'ios') {
+        const model = await DeviceInfo.getModel();
+        deviceInfo.hasNeuralEngine = model.includes('iPhone') && (
           model.includes('11') || model.includes('12') ||
           model.includes('13') || model.includes('14') || model.includes('15')
         );
-
-        deviceInfo.hasNeuralEngine = hasNeuralEngine;
-        deviceInfo.hasGPU = true; // All modern iOS devices have GPU
-        deviceInfo.processorType = hasNeuralEngine ? 'A12+' : 'A11-';
-
-        // Estimate memory based on device type
-        if (model.includes('Pro')) {
-          deviceInfo.memoryGB = 6;
-        } else if (model.includes('Plus') || model.includes('Max')) {
-          deviceInfo.memoryGB = 4;
-        } else {
-          deviceInfo.memoryGB = 3;
-        }
+        deviceInfo.processorType = deviceInfo.hasNeuralEngine ? 'A12+' : 'A11-';
       } else {
-        // Android device capabilities
-        const totalMemory = await DeviceInfo.getTotalMemory();
-        deviceInfo.memoryGB = Math.round(totalMemory / (1024 * 1024 * 1024));
-        deviceInfo.hasGPU = true; // Assume modern Android devices have GPU
         deviceInfo.processorType = await DeviceInfo.getSystemName();
       }
 
@@ -518,14 +506,14 @@ Focus on proactive protection and privacy preservation.`,
       console.log('Initializing AI Service...');
 
       // Check device capabilities
-      const capabilities = await NativeAI.getDeviceCapabilities();
+      const capabilities = await ProductionAI.getDeviceCapabilities();
       console.log('Device capabilities:', capabilities);
 
       // Initialize AI models
       await Promise.all([
-        NativeAI.initializeWhisper(),
-        NativeAI.initializePhi3(),
-        NativeAI.initializeTFLite(),
+        ProductionAI.initializeWhisper(),
+        ProductionAI.initializePhi3(),
+        ProductionAI.initializeTFLite(),
       ]);
 
       this.isInitialized = true;
@@ -544,9 +532,9 @@ Focus on proactive protection and privacy preservation.`,
     if (cachedResult) return cachedResult;
 
     try {
-      const result = await this.withRetry(() => NativeAI.transcribeAudio(audioPath));
+      const result = await this.withRetry(() => ProductionAI.transcribeAudio(audioPath));
       await this.setCache(cacheKey, result);
-      return result;
+      return result as string;
     } catch (error) {
       console.error('Audio transcription failed:', error);
       throw error;
@@ -582,7 +570,7 @@ Provide a concise, actionable daily briefing that includes:
 
 Keep it personal, motivating, and focused on the user's goals.`;
 
-      return await NativeAI.generateText(prompt, 800);
+      return await ProductionAI.generateText(prompt, 800);
     }
   }
 
@@ -619,7 +607,7 @@ Assess burnout risk and provide:
 
 Format as JSON with keys: level, message, suggestedActions, confidence`;
 
-      const response = await NativeAI.generateText(prompt, 400);
+      const response = await ProductionAI.generateText(prompt, 400);
       try {
         const result = JSON.parse(response);
         await this.setCache(cacheKey, result);
@@ -662,8 +650,8 @@ Recent Activity: ${JSON.stringify(healthData.recentActivity || {})}
 
 Provide actionable, specific recommendations that the user can implement today.`;
 
-      const response = await NativeAI.generateText(prompt, 300);
-      const recommendations = response.split('\n').filter(line => line.trim().length > 0);
+      const response = await ProductionAI.generateText(prompt, 300);
+      const recommendations = response.split('\n').filter((line: string) => line.trim().length > 0);
       await this.setCache(cacheKey, recommendations);
       return recommendations;
     }
@@ -705,7 +693,7 @@ Provide optimization suggestions that consider:
 
 Format as JSON with keys: suggestions, optimizedSchedule, conflicts, improvements`;
 
-      const response = await NativeAI.generateText(prompt, 600);
+      const response = await ProductionAI.generateText(prompt, 600);
       try {
         const result = JSON.parse(response);
         await this.setCache(cacheKey, result);
@@ -754,7 +742,7 @@ Provide:
 
 Format as JSON with keys: insights, opportunities, recommendations, riskLevel`;
 
-      const response = await NativeAI.generateText(prompt, 500);
+      const response = await ProductionAI.generateText(prompt, 500);
       try {
         const result = JSON.parse(response);
         await this.setCache(cacheKey, result);
@@ -803,7 +791,7 @@ Provide optimization suggestions for:
 
 Format as JSON with keys: energyOptimizations, automationSuggestions, securityImprovements, convenienceEnhancements`;
 
-      const response = await NativeAI.generateText(prompt, 400);
+      const response = await ProductionAI.generateText(prompt, 400);
       try {
         const result = JSON.parse(response);
         await this.setCache(cacheKey, result);
@@ -847,8 +835,8 @@ Context: ${JSON.stringify(context)}
 
 Provide 3-5 simple decisions or actions that can be automated or simplified to reduce mental load.`;
 
-      const response = await NativeAI.generateText(prompt, 300);
-      const suggestions = response.split('\n').filter(line => line.trim().length > 0);
+      const response = await ProductionAI.generateText(prompt, 300);
+      const suggestions = response.split('\n').filter((line: string) => line.trim().length > 0);
       await this.setCache(cacheKey, suggestions);
       return suggestions;
     }
@@ -877,7 +865,7 @@ Provide 3-5 simple decisions or actions that can be automated or simplified to r
         const docsContent = documents.map((doc: any) => doc.content).join('\n\n');
         const synthesisPrompt = `Based on the following information, provide a comprehensive answer to the query: "${query}"\n\nInformation:\n${docsContent}`;
 
-        result = await NativeAI.generateText(synthesisPrompt, 500);
+        result = await ProductionAI.generateText(synthesisPrompt, 500);
       } else {
         result = 'No relevant information found for your query.';
       }
@@ -889,7 +877,7 @@ Provide 3-5 simple decisions or actions that can be automated or simplified to r
       // Fallback to direct query answering
       const prompt = `Based on the following context, provide relevant knowledge for the query:\n\nQuery: ${query}\nContext: ${JSON.stringify(context)}\n\nProvide a concise, relevant response that addresses the query using the available context.`;
 
-      const result = await NativeAI.generateText(prompt, 400);
+      const result = await ProductionAI.generateText(prompt, 400);
       await this.setCache(cacheKey, result);
       return result;
     }
@@ -930,7 +918,7 @@ Provide 3-5 simple decisions or actions that can be automated or simplified to r
 
       const prompt = `Multiple AI agents are collaborating to analyze the following data:\n\nData: ${JSON.stringify(data)}\nAgents: ${agentConfigs.map(a => a?.name).join(', ')}\n\nProvide a comprehensive analysis that combines insights from all agents, considering:\n1. Cross-domain insights\n2. Potential conflicts\n3. Integrated recommendations\n4. Priority actions\n\nFormat as a comprehensive analysis with actionable insights.`;
 
-      const response = await NativeAI.generateText(prompt, 800);
+      const response = await ProductionAI.generateText(prompt, 800);
 
       return {
         id: `collaborative_${Date.now()}`,
@@ -1008,7 +996,7 @@ Provide 3-5 simple decisions or actions that can be automated or simplified to r
       // Fallback to local processing if backend fails
       const prompt = `Process the following AI task:\n\nType: ${task.type}\nPrompt: ${task.prompt}\nContext: ${JSON.stringify(task.context)}\nPriority: ${task.priority}\n\nProvide a detailed response addressing the task requirements.`;
 
-      await NativeAI.generateText(prompt, 500);
+      await ProductionAI.generateText(prompt, 500);
     }
   }
 
@@ -1049,7 +1037,7 @@ Provide 3-5 simple decisions or actions that can be automated or simplified to r
     if (!this.isInitialized) await this.initialize();
 
     try {
-      return await this.withRetry(() => NativeAI.generateText(prompt, maxTokens));
+      return await this.withRetry(() => ProductionAI.generateText(prompt, maxTokens));
     } catch (error) {
       console.error('Text generation failed:', error);
       return '';

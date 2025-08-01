@@ -1,12 +1,35 @@
-import SQLite from 'react-native-sqlite-2';
+import SQLite from 'react-native-sqlite-storage';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CryptoJS from 'crypto-js';
 
 // Enable debugging in development
+SQLite.DEBUG(true);
+SQLite.enablePromise(true);
 
 export interface DatabaseConfig {
   name: string;
   location: string;
   encryptionKey: string;
+}
+
+// User interface for authentication
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  avatar?: string;
+  preferences: any;
+  isOnboarded: boolean;
+  createdAt: number;
+  lastActive: number;
+}
+
+// Authentication state interface
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
 }
 
 export class DatabaseService {
@@ -19,18 +42,30 @@ export class DatabaseService {
 
   async initialize(): Promise<void> {
     try {
-      const databaseOptions = {
-        name: this.config.name,
-        location: this.config.location,
-        createFromLocation: '~lifeos.db',
-      };
+      // Use react-native-sqlite-storage instead of sqlite-2
+      if (!this.database) {
+        this.database = await new Promise((resolve, reject) => {
+          SQLite.openDatabase(
+            {
+              name: this.config.name,
+              location: 'default',
+            },
+            (db: any) => {
+              console.log('✅ Database opened successfully');
+              resolve(db);
+            },
+            (error: any) => {
+              console.error('❌ Database open failed:', error);
+              reject(error);
+            }
+          );
+        });
+      }
 
-      this.database = await SQLite.openDatabase(this.config.name);
-
-      // Set encryption key
-      await this.database.executeSql(
-        `PRAGMA key = '${this.config.encryptionKey}'`
-      );
+      // Verify database is properly initialized before proceeding
+      if (!this.database) {
+        throw new Error('Failed to initialize database object');
+      }
 
       // Create tables
       await this.createTables();
@@ -51,10 +86,22 @@ export class DatabaseService {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
         avatar TEXT,
         preferences TEXT NOT NULL,
+        is_onboarded INTEGER DEFAULT 0,
         created_at INTEGER NOT NULL,
         last_active INTEGER NOT NULL
+      )`,
+
+      // User sessions table for authentication
+      `CREATE TABLE IF NOT EXISTS user_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )`,
 
       // Health profiles table
@@ -563,6 +610,274 @@ export class DatabaseService {
     }));
   }
 
+  // ===== AUTHENTICATION METHODS =====
+
+  private hashPassword(password: string): string {
+    return CryptoJS.SHA256(password + 'lifeos_salt').toString();
+  }
+
+  private generateToken(): string {
+    // Use react-native-get-random-values instead of Node.js crypto
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  async registerUser(email: string, password: string, name: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      // Ensure database is initialized
+      if (!this.database) {
+        await this.initialize();
+      }
+
+      // Check if user already exists
+      const existingUser = await this.getUserByEmail(email);
+      if (existingUser) {
+        return { success: false, error: 'User already exists with this email' };
+      }
+
+      const hashedPassword = this.hashPassword(password);
+      const userId = Date.now().toString();
+      const now = Date.now();
+
+      const userData = {
+        id: userId,
+        name,
+        email,
+        password_hash: hashedPassword,
+        avatar: null,
+        preferences: JSON.stringify({}),
+        is_onboarded: 0,
+        created_at: now,
+        last_active: now,
+      };
+
+      await this.insert('users', userData);
+
+      // Create user session
+      const token = this.generateToken();
+      const sessionData = {
+        id: `session_${Date.now()}`,
+        user_id: userId,
+        token,
+        expires_at: now + (30 * 24 * 60 * 60 * 1000), // 30 days
+        created_at: now,
+      };
+
+      await this.insert('user_sessions', sessionData);
+
+      const user: User = {
+        id: parseInt(userId),
+        name,
+        email,
+        preferences: {},
+        isOnboarded: false,
+        createdAt: now,
+        lastActive: now,
+      };
+
+      // Store auth state
+      await this.storeAuthState({
+        isAuthenticated: true,
+        user,
+        token,
+      });
+
+      console.log('✅ User registered successfully:', email);
+      return { success: true, user };
+    } catch (error) {
+      console.error('❌ Registration failed:', error);
+      return { success: false, error: 'Registration failed. Please try again.' };
+    }
+  }
+
+  async signInUser(email: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      // Ensure database is initialized
+      if (!this.database) {
+        await this.initialize();
+      }
+
+      const userData = await this.getUserByEmail(email);
+      if (!userData) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const hashedPassword = this.hashPassword(password);
+      if (userData.password_hash !== hashedPassword) {
+        return { success: false, error: 'Invalid password' };
+      }
+
+      // Create new session
+      const token = this.generateToken();
+      const now = Date.now();
+      const sessionData = {
+        id: `session_${now}`,
+        user_id: userData.id,
+        token,
+        expires_at: now + (30 * 24 * 60 * 60 * 1000), // 30 days
+        created_at: now,
+      };
+
+      await this.insert('user_sessions', sessionData);
+
+      // Update last active
+      await this.update('users', userData.id, { last_active: now });
+
+      const user: User = {
+        id: parseInt(userData.id),
+        name: userData.name,
+        email: userData.email,
+        avatar: userData.avatar,
+        preferences: JSON.parse(userData.preferences || '{}'),
+        isOnboarded: userData.is_onboarded === 1,
+        createdAt: userData.created_at,
+        lastActive: now,
+      };
+
+      // Store auth state
+      await this.storeAuthState({
+        isAuthenticated: true,
+        user,
+        token,
+      });
+
+      console.log('✅ User signed in successfully:', email);
+      return { success: true, user };
+    } catch (error) {
+      console.error('❌ Sign in failed:', error);
+      return { success: false, error: 'Failed to sign in. Please try again.' };
+    }
+  }
+
+  async signOut(): Promise<void> {
+    try {
+      const authState = await this.getStoredAuthState();
+      if (authState?.token) {
+        // Invalidate session in database
+        await this.database?.executeSql(
+          'DELETE FROM user_sessions WHERE token = ?',
+          [authState.token]
+        );
+      }
+
+      // Clear stored auth state
+      await AsyncStorage.multiRemove(['auth_state', 'user_token', 'user_data']);
+      console.log('✅ User signed out successfully');
+    } catch (error) {
+      console.error('❌ Sign out failed:', error);
+    }
+  }
+
+  async logout(): Promise<void> {
+    return this.signOut();
+  }
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const authState = await this.getStoredAuthState();
+      if (!authState?.isAuthenticated || !authState.token) {
+        return null;
+      }
+
+      // Validate session
+      const isValidSession = await this.validateSession(authState.token);
+      if (!isValidSession) {
+        await this.signOut(); // Clear invalid session
+        return null;
+      }
+
+      return authState.user;
+    } catch (error) {
+      console.error('❌ Failed to get current user:', error);
+      return null;
+    }
+  }
+
+  async completeOnboarding(userId: number): Promise<void> {
+    try {
+      await this.update('users', userId.toString(), { is_onboarded: 1 });
+
+      // Update stored auth state
+      const authState = await this.getStoredAuthState();
+      if (authState?.user) {
+        authState.user.isOnboarded = true;
+        await this.storeAuthState(authState);
+      }
+
+      console.log('✅ Onboarding completed for user:', userId);
+    } catch (error) {
+      console.error('❌ Failed to complete onboarding:', error);
+      throw error;
+    }
+  }
+
+  async hasCompletedOnboarding(userId: number): Promise<boolean> {
+    try {
+      const user = await this.findById('users', userId.toString());
+      return user ? user.is_onboarded === 1 : false;
+    } catch (error) {
+      console.error('❌ Failed to check onboarding status:', error);
+      return false;
+    }
+  }
+
+  private async getUserByEmail(email: string): Promise<any | null> {
+    try {
+      const result = await this.database?.executeSql(
+        'SELECT * FROM users WHERE email = ? LIMIT 1',
+        [email]
+      );
+
+      if (result && result[0].rows.length > 0) {
+        return result[0].rows.item(0);
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Failed to get user by email:', error);
+      return null;
+    }
+  }
+
+  private async validateSession(token: string): Promise<boolean> {
+    try {
+      const result = await this.database?.executeSql(
+        'SELECT * FROM user_sessions WHERE token = ? AND expires_at > ? LIMIT 1',
+        [token, Date.now()]
+      );
+
+      return result && result[0].rows.length > 0;
+    } catch (error) {
+      console.error('❌ Failed to validate session:', error);
+      return false;
+    }
+  }
+
+  private async storeAuthState(authState: AuthState): Promise<void> {
+    try {
+      await AsyncStorage.setItem('auth_state', JSON.stringify(authState));
+      await AsyncStorage.setItem('user_token', authState.token || '');
+      await AsyncStorage.setItem('user_data', JSON.stringify(authState.user));
+    } catch (error) {
+      console.error('❌ Failed to store auth state:', error);
+    }
+  }
+
+  private async getStoredAuthState(): Promise<AuthState | null> {
+    try {
+      const authStateString = await AsyncStorage.getItem('auth_state');
+      if (authStateString) {
+        return JSON.parse(authStateString);
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Failed to get stored auth state:', error);
+      return null;
+    }
+  }
+
+  // ===== END AUTHENTICATION METHODS =====
+
   async close(): Promise<void> {
     if (this.database) {
       await this.database.close();
@@ -598,4 +913,4 @@ export const databaseService = new DatabaseService({
   name: 'lifeos.db',
   location: Platform.OS === 'ios' ? 'Library' : 'default',
   encryptionKey: 'your-secure-encryption-key-here', // This should be stored securely
-}); 
+});

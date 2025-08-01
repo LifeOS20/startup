@@ -1,438 +1,409 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
+  StatusBar,
+  ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { useLifeOSStore } from '../stores/lifeOSStore';
-import { useAuthStore } from '../stores/authStore';
-import { appInitializer } from '../services/AppInitializer';
+import { databaseService } from '../services/DatabaseService';
 
-// Import components (will be created)
-import DailyBriefingCard from '../components/DailyBriefingCard';
-import QuickStatsCard from '../components/QuickStatsCard';
-import HealthOverviewCard from '../components/HealthOverviewCard';
-import FinanceOverviewCard from '../components/FinanceOverviewCard';
-import ScheduleOverviewCard from '../components/ScheduleOverviewCard';
-import SmartHomeOverviewCard from '../components/SmartHomeOverviewCard';
-import FamilyOverviewCard from '../components/FamilyOverviewCard';
-import NotificationCard from '../components/NotificationCard';
-import LoadingSpinner from '../components/LoadingSpinner';
+interface ConnectedService {
+  id: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+  data?: any;
+}
+
+interface DashboardState {
+  services: ConnectedService[];
+  lastUpdated: Date | null;
+}
+
 const DashboardScreen: React.FC = () => {
-  const navigation = useNavigation();
-  const [refreshing, setRefreshing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const [greeting, setGreeting] = useState<string>('');
+  const [dashboardState, setDashboardState] = useState<DashboardState>({
+    services: [],
+    lastUpdated: null,
+  });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const {
-    user,
-    dailyBriefing,
-    healthProfile,
-    financialProfile,
-    schedule,
-    smartHomeData,
-    familyData,
-    notifications,
-    activeAgents,
-    syncStatus,
-    lastSync,
-  } = useLifeOSStore();
-
-  const { user: authUser } = useAuthStore();
-
-  useEffect(() => {
-    // Load initial data if not already loaded
-    if (!dailyBriefing && !isLoading) {
-      loadDashboardData();
-    }
-  }, []);
-
-  const loadDashboardData = async () => {
-    setIsLoading(true);
-    try {
-      // Perform full sync to get latest data
-      await appInitializer.performFullSync();
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-      Alert.alert('Error', 'Failed to load dashboard data. Please try again.');
-    } finally {
-      setIsLoading(false);
+  const updateGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      setGreeting('Good Morning');
+    } else if (hour >= 12 && hour < 17) {
+      setGreeting('Good Afternoon');
+    } else if (hour >= 17 && hour < 22) {
+      setGreeting('Good Evening');
+    } else {
+      setGreeting('Good Night');
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
+  const checkConnectedServices = async (): Promise<ConnectedService[]> => {
+    const services: ConnectedService[] = [];
+
+    // Check each service individually without causing errors
+    // Only add services that are actually connected and have real data
+
+    // For now, return empty array until services are properly connected
+    // This prevents any mock/predefined data from showing
+
+    return services;
+  };
+
+  const loadDashboardData = async () => {
+    if (!refreshing) setLoading(true);
+
     try {
-      await loadDashboardData();
+      const connectedServices = await checkConnectedServices();
+
+      setDashboardState({
+        services: connectedServices,
+        lastUpdated: new Date(),
+      });
     } catch (error) {
-      console.error('Refresh failed:', error);
+      console.error('Error loading dashboard:', error);
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleConnectIntegration = async (integration: string) => {
-    try {
-      let success = false;
-      
-      switch (integration) {
-        case 'google-calendar':
-          success = await appInitializer.connectGoogleCalendar();
-          break;
-        case 'plaid':
-          success = await appInitializer.connectPlaid();
-          break;
-        case 'health':
-          success = await appInitializer.requestHealthPermissions();
-          break;
-        default:
-          break;
+  const refreshData = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+  };
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const user = await databaseService.getCurrentUser();
+        if (user) {
+          setUserName(user.name);
+        }
+      } catch (error) {
+        console.error('Failed to load user data:', error);
       }
+    };
 
-      if (success) {
-        Alert.alert('Success', `${integration} connected successfully!`);
-        await loadDashboardData();
-      } else {
-        Alert.alert('Error', `Failed to connect ${integration}. Please try again.`);
-      }
-    } catch (error) {
-      console.error(`Failed to connect ${integration}:`, error);
-      Alert.alert('Error', `Failed to connect ${integration}. Please try again.`);
-    }
-  };
+    loadUserData();
+    updateGreeting();
+    loadDashboardData();
 
-  const handleNavigateToScreen = (screen: string) => {
-    navigation.navigate(screen as never);
-  };
+    // Update greeting every minute
+    const interval = setInterval(updateGreeting, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleViewSecurityDashboard = () => {
-    navigation.navigate('SecurityDashboard' as never);
-  };
+  const EmptyState = () => (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <View style={styles.iconCircle} />
+      </View>
+      <Text style={styles.emptyTitle}>Welcome to your Life Dashboard</Text>
+      <Text style={styles.emptySubtitle}>
+        Connect your services to see personalized insights and data from your daily life.
+      </Text>
+      <View style={styles.servicesList}>
+        <Text style={styles.servicesTitle}>Available Integrations:</Text>
+        <View style={styles.serviceItem}>
+          <View style={styles.serviceDot} />
+          <Text style={styles.serviceText}>Calendar & Schedule</Text>
+        </View>
+        <View style={styles.serviceItem}>
+          <View style={styles.serviceDot} />
+          <Text style={styles.serviceText}>Health & Fitness</Text>
+        </View>
+        <View style={styles.serviceItem}>
+          <View style={styles.serviceDot} />
+          <Text style={styles.serviceText}>Financial Accounts</Text>
+        </View>
+        <View style={styles.serviceItem}>
+          <View style={styles.serviceDot} />
+          <Text style={styles.serviceText}>Smart Home</Text>
+        </View>
+      </View>
+    </View>
+  );
 
-  if (isLoading) {
+  const ConnectedServiceCard = ({ service }: { service: ConnectedService }) => (
+    <View style={styles.serviceCard}>
+      <View style={styles.serviceHeader}>
+        <Text style={styles.serviceName}>{service.name}</Text>
+        <View style={styles.connectedIndicator} />
+      </View>
+      {/* Service-specific data will be rendered here when connected */}
+    </View>
+  );
+
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <LoadingSpinner message="Loading your LifeOS dashboard..." />
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+          <Text style={styles.loadingText}>Setting up your dashboard...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
+  const hasConnectedServices = dashboardState.services.length > 0;
+
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Text style={styles.greeting}>{greeting}</Text>
+          <Text style={styles.userName}>{userName || 'Welcome'}</Text>
+        </View>
+        {hasConnectedServices && (
+          <TouchableOpacity onPress={refreshData} disabled={refreshing} style={styles.refreshButton}>
+            <Text style={styles.refreshText}>
+              {refreshing ? '···' : '↻'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView
         style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshData}
+            colors={['#4F46E5']}
+            tintColor="#4F46E5"
+          />
+        }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>
-              Good {getGreeting()}, {authUser?.name || 'User'}!
-            </Text>
-            <Text style={styles.subtitle}>Your personal CEO dashboard</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.securityButton}
-            onPress={handleViewSecurityDashboard}
-          >
-            <Text style={styles.securityButtonText}>🔒</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.content}>
+          {hasConnectedServices ? (
+            <>
+              {/* Connected Services */}
+              <View style={styles.servicesSection}>
+                <Text style={styles.sectionTitle}>Your Connected Life</Text>
+                {dashboardState.services.map((service) => (
+                  <ConnectedServiceCard key={service.id} service={service} />
+                ))}
+              </View>
 
-        {/* Sync Status */}
-        {syncStatus !== 'idle' && (
-          <View style={styles.syncStatus}>
-            <Text style={styles.syncStatusText}>
-              {syncStatus === 'syncing' ? '🔄 Syncing...' : 
-               syncStatus === 'completed' ? '✅ Synced' : 
-               '❌ Sync failed'}
-            </Text>
-            {lastSync && (
-              <Text style={styles.lastSyncText}>
-                Last sync: {formatTime(lastSync)}
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* Daily Briefing */}
-        <DailyBriefingCard
-          briefing={dailyBriefing}
-          onRefresh={loadDashboardData}
-        />
-
-        {/* Quick Stats */}
-        <QuickStatsCard
-          healthProfile={healthProfile}
-          financialProfile={financialProfile}
-          schedule={schedule}
-          notifications={notifications}
-        />
-
-        {/* Health Overview */}
-        <HealthOverviewCard
-          healthProfile={healthProfile}
-          onPress={() => handleNavigateToScreen('Health')}
-          onConnect={() => handleConnectIntegration('health')}
-        />
-
-        {/* Finance Overview */}
-        <FinanceOverviewCard
-          financialProfile={financialProfile}
-          onPress={() => handleNavigateToScreen('Finance')}
-          onConnect={() => handleConnectIntegration('plaid')}
-        />
-
-        {/* Schedule Overview */}
-        <ScheduleOverviewCard
-          schedule={schedule}
-          onPress={() => handleNavigateToScreen('Schedule')}
-          onConnect={() => handleConnectIntegration('google-calendar')}
-        />
-
-        {/* Smart Home Overview */}
-        <SmartHomeOverviewCard
-          smartHomeData={smartHomeData}
-          onPress={() => handleNavigateToScreen('SmartHome')}
-        />
-
-        {/* Family Overview */}
-        <FamilyOverviewCard
-          familyData={familyData}
-          onPress={() => handleNavigateToScreen('Family')}
-        />
-
-        {/* AI Agents Status */}
-        {activeAgents.length > 0 && (
-          <View style={styles.agentsSection}>
-            <Text style={styles.sectionTitle}>🤖 AI Agents</Text>
-            <View style={styles.agentsGrid}>
-              {activeAgents.map((agent) => (
-                <View key={agent.id} style={styles.agentCard}>
-                  <Text style={styles.agentName}>{agent.name}</Text>
-                  <Text style={styles.agentStatus}>
-                    {agent.status === 'active' ? '🟢' : '🔴'} {agent.status}
+              {/* Last Updated */}
+              {dashboardState.lastUpdated && (
+                <View style={styles.lastUpdated}>
+                  <Text style={styles.lastUpdatedText}>
+                    Last updated: {dashboardState.lastUpdated.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </Text>
-                  <Text style={styles.agentRole}>{agent.role}</Text>
                 </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Recent Notifications */}
-        {notifications.length > 0 && (
-          <View style={styles.notificationsSection}>
-            <Text style={styles.sectionTitle}>🔔 Recent Notifications</Text>
-            {notifications.slice(0, 3).map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-                onPress={() => {
-                  // Handle notification press
-                  useLifeOSStore.getState().markNotificationRead(notification.id);
-                }}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Quick Actions */}
-        <View style={styles.quickActionsSection}>
-          <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
-            <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => handleNavigateToScreen('Schedule')}
-            >
-              <Text style={styles.quickActionIcon}>📅</Text>
-              <Text style={styles.quickActionText}>Add Event</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => handleNavigateToScreen('Health')}
-            >
-              <Text style={styles.quickActionIcon}>💧</Text>
-              <Text style={styles.quickActionText}>Log Water</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => handleNavigateToScreen('Finance')}
-            >
-              <Text style={styles.quickActionIcon}>💰</Text>
-              <Text style={styles.quickActionText}>Add Expense</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => handleNavigateToScreen('Family')}
-            >
-              <Text style={styles.quickActionIcon}>👨‍👩‍👧‍👦</Text>
-              <Text style={styles.quickActionText}>Family Chat</Text>
-            </TouchableOpacity>
-          </View>
+              )}
+            </>
+          ) : (
+            <EmptyState />
+          )}
         </View>
-
-        {/* Bottom Spacing */}
-        <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-const getGreeting = (): string => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'morning';
-  if (hour < 17) return 'afternoon';
-  return 'evening';
-};
-
-const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    alignItems: 'flex-end',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  headerContent: {
+    flex: 1,
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#212529',
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '400',
+    marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#6c757d',
-    marginTop: 2,
+  userName: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.5,
   },
-  securityButton: {
+  refreshButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f8f9fa',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: '#E5E7EB',
   },
-  securityButtonText: {
+  refreshText: {
     fontSize: 18,
+    color: '#4F46E5',
+    fontWeight: '600',
   },
-  syncStatus: {
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
+
+  // Empty State
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  iconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 3,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
+  servicesList: {
+    width: '100%',
+    maxWidth: 280,
+  },
+  servicesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  serviceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  serviceDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D1D5DB',
+    marginRight: 12,
+  },
+  serviceText: {
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '400',
+  },
+
+  // Connected Services
+  servicesSection: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 20,
+  },
+  serviceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  serviceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#e3f2fd',
   },
-  syncStatusText: {
-    fontSize: 12,
-    color: '#1976d2',
-    fontWeight: '500',
-  },
-  lastSyncText: {
-    fontSize: 10,
-    color: '#1976d2',
-  },
-  agentsSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  sectionTitle: {
+  serviceName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#212529',
-    marginBottom: 10,
-  },
-  agentsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  agentCard: {
-    flex: 1,
-    minWidth: 150,
-    padding: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  agentName: {
-    fontSize: 14,
     fontWeight: '600',
-    color: '#212529',
+    color: '#111827',
   },
-  agentStatus: {
-    fontSize: 12,
-    color: '#6c757d',
-    marginTop: 2,
+  connectedIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
   },
-  agentRole: {
-    fontSize: 10,
-    color: '#6c757d',
-    marginTop: 2,
+
+  // Last Updated
+  lastUpdated: {
+    alignItems: 'center',
+    marginTop: 20,
   },
-  notificationsSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+  lastUpdatedText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontWeight: '400',
   },
-  quickActionsSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  quickActionButton: {
+
+  // Loading
+  loadingContainer: {
     flex: 1,
-    minWidth: 80,
-    padding: 15,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  quickActionIcon: {
-    fontSize: 24,
-    marginBottom: 5,
-  },
-  quickActionText: {
-    fontSize: 12,
-    color: '#212529',
-    fontWeight: '500',
-  },
-  bottomSpacing: {
-    height: 100,
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 16,
+    fontWeight: '400',
   },
 });
 
-export default DashboardScreen; 
+export default DashboardScreen;
